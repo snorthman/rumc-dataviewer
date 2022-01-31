@@ -3,7 +3,7 @@ import webbrowser
 import dearpygui.dearpygui as dpg
 from thefuzz import fuzz
 
-import src.tools as tools
+from viewer import tools
 
 whitelist_data_keys = {"type", "sequence", "dob", "gender", "date"}
 

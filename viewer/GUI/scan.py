@@ -2,7 +2,7 @@ import os, threading, queue, time
 
 import dearpygui.dearpygui as dpg
 
-import src.tools as tools
+import viewer.tools as tools
 
 
 

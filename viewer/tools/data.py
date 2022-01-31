@@ -3,7 +3,7 @@ from pathlib import Path
 
 import SimpleITK as sitk
 
-with open(Path(__file__).parent.joinpath("assets\\dicom_kvp.json"), "r") as assetfile:
+with open(Path(__file__).parent.joinpath("dicom_kvp.json"), "r") as assetfile:
     dicom_kvp = json.load(assetfile)
 
 

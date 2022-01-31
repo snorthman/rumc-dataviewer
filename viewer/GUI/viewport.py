@@ -6,7 +6,7 @@ import SimpleITK as sitk
 from .explorer import Explorer
 from .scan import Scan
 from .filter import Filter
-import src.tools as tools
+import viewer.tools as tools
 
 sitks = sitk.ImageSeriesReader()
 texture_registry = set()
