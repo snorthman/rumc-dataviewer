@@ -1,6 +1,6 @@
 import dearpygui.dearpygui as dpg
 
-import viewer.tools as tools
+from viewer import tools
 
 
 class Filter:

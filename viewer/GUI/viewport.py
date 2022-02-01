@@ -6,7 +6,7 @@ import SimpleITK as sitk
 from .explorer import Explorer
 from .scan import Scan
 from .filter import Filter
-import viewer.tools as tools
+from viewer import tools
 
 sitks = sitk.ImageSeriesReader()
 texture_registry = set()
@@ -43,7 +43,10 @@ class Viewer:
 
         tools.config.load()
         json = tools.config.get('DATA', 'json', fallback=None)
-        self.data = tools.load_data(json) if json else []
+        try:
+            self.data = tools.load_data(json) if json else []
+        except FileNotFoundError:
+            self.data = []
         if len(self.data) > 0:
             Explorer(self.data)
 

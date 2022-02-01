@@ -2,15 +2,16 @@ import os, threading, queue, time
 
 import dearpygui.dearpygui as dpg
 
-import viewer.tools as tools
+from viewer import tools
 
 
 
 class Scan:
     def __init__(self, path):
-        self.dir = path
-        if os.path.exists(self.dir):
-            self.total = len(os.listdir(self.dir))
+        self.dir = None
+        if os.path.exists(path) and len(path) > 1:
+            self.dir = path
+            self.total = len(os.listdir(path))
             with dpg.window(label="Scan ()", no_resize=True, autosize=True) as self.w:
                 with dpg.drawlist(width=500, height=30):
                     with dpg.draw_layer():
@@ -23,8 +24,9 @@ class Scan:
             self.Q = queue.Queue()
 
     def run(self):
-        threading.Thread(target=tools.scan_data, args=(self.dir, os.getcwd(), self.Q)).start()
-        threading.Thread(target=self._update_scan_data).start()
+        if self.dir is not None:
+            threading.Thread(target=tools.scan_data, args=(self.dir, os.getcwd(), self.Q)).start()
+            threading.Thread(target=self._update_scan_data).start()
 
     def _update_scan_data(self):
         v = []

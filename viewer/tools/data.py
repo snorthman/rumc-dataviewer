@@ -69,13 +69,13 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
             if queue:
                 queue.put(i + 1)
 
-    dump = json.dumps({"dir": dirp, "patients": data.copy()})
+    write = {"dir": dirp, "patients": data.copy()}
     try:
-        f = open(savep + "\\DATA_" + data_name + ".json", "w")
-        f.write(dump)
-        f.close()
-    except:
-        print(dump)
+        with open(savep + "\\DATA_" + data_name + ".json", "w") as f:
+            f.write(json.dumps(write))
+    except PermissionError as e:
+        print(f"Unexpected error {e}\nprinting json to console")
+        print(json.dumps(write))
     finally:
         if queue:
             queue.put(0)
