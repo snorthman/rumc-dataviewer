@@ -1,7 +1,6 @@
 import threading, os, sys, getopt, queue
 
-import GUI
-import tools
+import viewer
 
 def main(argv):
     try:
@@ -16,7 +15,7 @@ def main(argv):
         elif opt in ("-s", "--scan"):
             Q = queue.Queue()
             t = len(os.listdir(arg))
-            threading.Thread(target=tools.scan_data, args=(arg, os.getcwd(), Q))
+            threading.Thread(target=viewer.tools.scan_data, args=(arg, os.getcwd(), Q))
             while True:
                 q = Q.get()
                 if q == -1:
@@ -30,9 +29,9 @@ def main(argv):
 
     # no opts? -> create GUI
 
-    dataviewer = GUI.Viewer(tools.filedialog)
+    dataviewer = viewer.GUI.Viewer(viewer.tools.filedialog)
     threading.Thread(target=dataviewer.run).start()
-    tools.filedialog.process()
+    viewer.tools.filedialog.process()
 
 
 if __name__ == '__main__':

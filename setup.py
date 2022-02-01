@@ -3,7 +3,7 @@ from setuptools import setup
 setup(
     name='RUCMDataViewer',
     version='1.0',
-    packages=[''],
+    packages=['viewer'],
     url='',
     license='',
     author='C.R. Noordman',
