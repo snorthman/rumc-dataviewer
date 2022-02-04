@@ -1,4 +1,6 @@
-import os, re, json
+import os, re, json, argparse
+import queue
+import threading
 from pathlib import Path
 
 import SimpleITK as sitk
@@ -80,6 +82,25 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
         if queue:
             queue.put(0)
     return savep
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description="View data downloaded from RUMC", )
+    parser.add_argument('-s', '--scan', help="Path to RUMC patient level data")
+    args = parser.parse_args()
+    if args.scan is not None:
+        Q = queue.Queue()
+        t = len(os.listdir(args.scan))
+        threading.Thread(target=scan_data, args=(args.scan, os.getcwd(), Q)).start()
+        while True:
+            q = Q.get()
+            if q <= 0:
+                break
+            percent = round(100 * q / t)
+            arrow = '-' * int(percent / 100 * 20 - 1) + '>'
+            spaces = ' ' * (20 - len(arrow))
+            print('Progress: [%s%s] %d %%' % (arrow, spaces, percent), end='\r')
+        print(f'Scan complete, wrote result to {os.getcwd()}\n', end='\r')
+        quit(0)
 
 # ['0008|0005:ISO_IR 100',
 #  '0008|0008:ORIGINAL\\PRIMARY\\M\\NORM\\DIS2D ',
