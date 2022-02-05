@@ -40,15 +40,17 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
     for i, p in enumerate(data):
         try:
             dicom = {}
-            dir = f"{dirp}\\{p['id']}"
+            dir = f"{dirp}/{p['id']}"
             for study in os.listdir(dir):
                 dicom[study] = {}
-                for serie in os.listdir(f"{dir}\\{study}"):
-                    fp = f"{dir}\\{study}\\{serie}"
+                for serie in os.listdir(f"{dir}/{study}"):
+                    fp = f"{dir}/{study}/{serie}"
                     try:
-                        sitki.SetFileName(f"{fp}\\0.dcm")
+                        files = os.listdir(fp)
+                        dcm = next(filter(lambda a: re.fullmatch(r'\d+\.dcm', a), files))
+                        sitki.SetFileName(f"{fp}/{dcm}")
                         sitki.ReadImageInformation()
-                        item = {"path": fp}
+                        item = {"path": fp, "files": files, "dcm": dcm}
                         for key, value in dicom_kvp.items():
                             try:
                                 item[value] = sitki.GetMetaData(key)
@@ -61,11 +63,12 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
             # p['n_total'] = sum([n for n in p['n'].values()])
             p['data'] = dicom
         except Exception as ex:
+            breakpoint()
             if queue:
                 queue.put(-1 * p['id'])
-            else:
-                print(f"ERROR: patient {p['id']}")
-                print(ex)
+            # else:
+            print(f"ERROR: patient {p['id']}")
+            print(ex)
             continue
         finally:
             if queue:
@@ -73,7 +76,7 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
 
     write = {"dir": dirp, "patients": data.copy()}
     try:
-        with open(savep + "\\DATA_" + data_name + ".json", "w") as f:
+        with open(savep + "/DATA_" + data_name + ".json", "w") as f:
             f.write(json.dumps(write))
     except PermissionError as e:
         print(f"Unexpected error {e}\nprinting json to console")
@@ -83,24 +86,38 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
             queue.put(0)
     return savep
 
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="View data downloaded from RUMC", )
     parser.add_argument('-s', '--scan', help="Path to RUMC patient level data")
+    parser.add_argument('-o', '--output', help="Path to save output to")
     args = parser.parse_args()
     if args.scan is not None:
+        savep = args.output if args.output is not None else os.getcwd()
         Q = queue.Queue()
         t = len(os.listdir(args.scan))
-        threading.Thread(target=scan_data, args=(args.scan, os.getcwd(), Q)).start()
+        print(f"scandir={args.scan}, output={savep}")
+        threading.Thread(target=scan_data, args=(args.scan, savep, Q)).start()
+
+        errors = []
         while True:
             q = Q.get()
-            if q <= 0:
+            if q == 0:
                 break
-            percent = round(100 * q / t)
+            if q < 0:
+                errors.append(-q)
+                continue
+            percent = round(100 * q / t, 2)
             arrow = '-' * int(percent / 100 * 20 - 1) + '>'
             spaces = ' ' * (20 - len(arrow))
-            print('Progress: [%s%s] %d %%' % (arrow, spaces, percent), end='\r')
-        print(f'Scan complete, wrote result to {os.getcwd()}\n', end='\r')
+            print(f'Progress: [{arrow}{spaces}] {percent}% ({q}/{t})')
+        print(f'Scan completed{" with errors" if len(errors) > 0 else ""}, wrote result to {os.getcwd()}\n', end='\r')
+        if len(errors) > 0:
+            print('errors:', ', '.join(errors))
         quit(0)
+    else:
+        parser.print_help()
+        quit(-1)
 
 # ['0008|0005:ISO_IR 100',
 #  '0008|0008:ORIGINAL\\PRIMARY\\M\\NORM\\DIS2D ',

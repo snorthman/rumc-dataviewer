@@ -1,12 +1,14 @@
-import webbrowser
+import webbrowser, os
 
 import dearpygui.dearpygui as dpg
 from thefuzz import fuzz
 
+import SimpleITK as sitk
+
 from .. import tools
 
 whitelist_data_keys = {"type", "sequence", "dob", "gender", "date"}
-
+sitki = sitk.ImageFileReader()
 
 class Explorer:
     def __init__(self, data, filter_info=None):
@@ -106,14 +108,21 @@ class Explorer:
                 with dpg.table_row():
                     dpg.add_button(label="Expand", user_data=t, callback=self._expand_item_callback)
 
+                with dpg.table_row(user_data=True):
+                    dpg.add_text("dicoms")
+                    dpg.add_text(str(len(user_data.get('files'))))
                 for v in tools.dicom_kvp.values():
                     s = v in whitelist_data_keys
                     with dpg.table_row(show=s, user_data=s):
                         dpg.add_text(v)
                         dpg.add_text(user_data.get(v))
 
+            breakpoint()
+            preview_path = os.join.path(user_data['path'], user_data['dcm'])
             dpg.add_input_text(default_value=user_data['path'] + "\\0.dcm", readonly=True, width=250)
             dpg.add_button(label="Explore to path", callback=lambda: webbrowser.open(user_data['path']), width=250)
+
+            # reader.SetFileName(inputImageFileName)
 
     def _expand_item_callback(self, sender, app_data, user_data):
         rows = dpg.get_item_children(user_data, 1)[1:]

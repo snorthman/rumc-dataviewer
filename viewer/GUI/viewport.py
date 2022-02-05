@@ -43,19 +43,24 @@ class Viewer:
 
         tools.config.load()
         json = tools.config.get('DATA', 'json', fallback=None)
+        self.explorer = -1
         try:
             self.data = tools.load_data(json) if json else []
         except FileNotFoundError:
             self.data = []
         if len(self.data) > 0:
-            Explorer(self.data)
+            e = Explorer(self.data)
+            self.explorer = e.w
 
     def callback_open_data(self):
         json = self.filedialog.dialog_json()
         if os.path.exists(json) and json.endswith('.json'):
             self.data = tools.load_data(json)
             tools.config.add("DATA", "json", json)
-            Explorer(self.data)
+            if self.explorer > 0:
+                dpg.delete_item(self.explorer)
+            e = Explorer(self.data)
+            self.explorer = e.w
 
     def callback_scan_data(self):
         scan_dir = self.filedialog.dialog_dir()
@@ -79,10 +84,7 @@ class Viewer:
                 tools.config.delete_section(s)
                 self.update_menu_filters()
 
-            def dd():
-                Explorer(self.data, filt)
-
-            dpg.add_menu_item(parent="filter_menu", label=name, callback=dd)
+            dpg.add_menu_item(parent="filter_menu", label=name, callback=lambda: Explorer(self.data, filt))
             dpg.add_menu_item(parent="filter_menu_delete", label=name, callback=delete_menu_filter)
 
         dpg.configure_item("filter_menu_delete", show=len(sections) > 0)
