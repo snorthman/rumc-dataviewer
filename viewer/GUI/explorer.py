@@ -2,6 +2,8 @@ import webbrowser, os
 
 import dearpygui.dearpygui as dpg
 from thefuzz import fuzz
+import pydicom
+import numpy as np
 
 import SimpleITK as sitk
 
@@ -13,7 +15,9 @@ sitki = sitk.ImageFileReader()
 class Explorer:
     def __init__(self, data, filter_info=None):
         no_filter = filter_info is None
-        self.data = data
+        self.data = data['patients']
+        self.dir = data['dir']
+        self.preview = False
         if no_filter:
             self.filter = None
         else:
@@ -117,10 +121,21 @@ class Explorer:
                         dpg.add_text(v)
                         dpg.add_text(user_data.get(v))
 
-            breakpoint()
-            preview_path = os.join.path(user_data['path'], user_data['dcm'])
-            dpg.add_input_text(default_value=user_data['path'] + "\\0.dcm", readonly=True, width=250)
-            dpg.add_button(label="Explore to path", callback=lambda: webbrowser.open(user_data['path']), width=250)
+            if self.preview:
+                fp = f"{self.dir}/{user_data['id_patient'].strip()}/{user_data['id_study']}/{user_data['id_series']}"
+                dpg.add_input_text(default_value=fp, readonly=True, width=250)
+                dpg.add_button(label="Explore to path", callback=lambda: webbrowser.open(user_data['path']), width=250)
+                img = pydicom.read_file(f"{fp}/{user_data['dcm']}").pixel_array
+                with dpg.texture_registry():
+                    texture_data = []
+                    [texture_data.extend([px, px, px, 1]) for px in np.flipud(img).flatten() / img.max(initial=1)]
+                    tex = dpg.add_static_texture(img.shape[0], img.shape[1], texture_data)
+                with dpg.plot(label=user_data['dcm'], height=img.shape[0] * 2, width=img.shape[1] * 2):
+                    ax = [dpg.add_plot_axis(axis, no_tick_marks=True) for axis in [dpg.mvXAxis, dpg.mvYAxis]]
+                    dpg.draw_image(tex, pmin=[0, 0], pmax=[1, 1])#img.shape)
+                    # [dpg.set_axis_limits(ax[i], 0, img.shape[i]) for i in range(len(ax))]
+
+
 
             # reader.SetFileName(inputImageFileName)
 

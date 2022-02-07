@@ -10,8 +10,7 @@ with open(Path(__file__).parent.joinpath("dicom_kvp.json"), "r") as assetfile:
 
 
 def load_data(fp):
-    j = json.load(open(fp))
-    return j['patients']
+    return json.load(open(fp))
 
 
 def scan_data(dirp, savep=os.getcwd(), queue=None):
@@ -50,7 +49,7 @@ def scan_data(dirp, savep=os.getcwd(), queue=None):
                         dcm = next(filter(lambda a: re.fullmatch(r'\d+\.dcm', a), files))
                         sitki.SetFileName(f"{fp}/{dcm}")
                         sitki.ReadImageInformation()
-                        item = {"path": fp, "files": files, "dcm": dcm}
+                        item = {"path": f"{p['id']}/{study}/{serie}", "files": files, "dcm": dcm}
                         for key, value in dicom_kvp.items():
                             try:
                                 item[value] = sitki.GetMetaData(key)

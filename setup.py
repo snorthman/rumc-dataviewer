@@ -9,5 +9,5 @@ setup(
     author='C.R. Noordman',
     author_email='stan.noordman@radboudumc.nl',
     description='View data downloaded from RUMC',
-    install_requires=['dearpygui', 'SimpleITK', 'thefuzz'],
+    install_requires=['dearpygui', 'SimpleITK', 'thefuzz', 'gdcm', 'pylibjpeg', 'pydicom', 'numpy'],
 )
