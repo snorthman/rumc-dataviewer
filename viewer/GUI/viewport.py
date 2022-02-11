@@ -3,30 +3,16 @@ import os
 import dearpygui.dearpygui as dpg
 import SimpleITK as sitk
 
+from .. import db
 from .explorer import Explorer
 from .scan import Scan
 from .filter import Filter
-from viewer import tools
+from viewer import tools, db
 
 sitks = sitk.ImageSeriesReader()
 texture_registry = set()
 
 viewport_size = [1024, 768]
-
-
-# def external_callback(sender, app_data, user_data):
-#     config.add("EXTERNAL", user_data, app_data)
-#
-#
-# def open_itksnap_callback(sender, app_data, user_data):
-#     gdcmconv = config.get("EXTERNAL", "gdcmconv", fallback=None)
-#     if gdcmconv is not None:
-#         dicom2nifti.settings.set_gdcmconv_path(gdcmconv)
-#         nii = dicom2nifti.dicom_series_to_nifti(user_data, os.getcwd() + "\\temp\\", reorient_nifti=True)
-#         print(nii['NII_FILE'])
-#     else:
-#         dpg.configure_item(sender, label="Could not locate gdcmconv", enabled=False)
-
 
 class Viewer:
     def __init__(self, filedialog):
@@ -43,21 +29,20 @@ class Viewer:
 
         tools.config.load()
         self.explorers = []
-        self.data = dict()
 
     def _load_data(self, json):
         try:
-            self.data = tools.load_data(json) if json else dict()
+            db.initialize(tools.load_data(json) if json else dict())
             if tools.config.get("DATA", "json") != json:
                 tools.config.delete_section("DATA")
                 tools.config.add("DATA", "json", json)
         except FileNotFoundError:
-            self.data = dict()
-        if 'patients' in self.data and 'dir' in self.data:
-            self.data['dir'] = tools.config.get('DATA', 'dir', fallback=self.data['dir'])
+            db.initialize(dict())
 
+        db.dir = tools.config.get('DATA', 'dir', fallback=db.dir)
+        if len(db.dir) > 0:
             [dpg.delete_item(e.w) for e in self.explorers]
-            self.explorers = [Explorer(self.data)]
+            self.explorers = [Explorer()]
 
             if not self._data_dir_path_exists():
                 dpg.show_item("dir_updater")
@@ -65,28 +50,25 @@ class Viewer:
     def _data_dir_path_exists(self):
         fkey = lambda d: next(iter(d))
         try:
-            a = self.data['patients'][0]
+            a = db.patients[0]
             study = fkey(a['data'])
             serie = fkey(a['data'][study])
             dcm = a['data'][study][serie]['dcm']
-            path = os.path.isfile(f"{self.data['dir']}/{a['id']}/{study}/{serie}/{dcm}")
+            path = os.path.isfile(f"{db.dir}/{a['id']}/{study}/{serie}/{dcm}")
         except:
             path = False
-        dpg.configure_item("dir_check1", show=not path)
-        dpg.configure_item("dir_check2", show=not path)
         dpg.configure_item("dir_updater", show=not path)
+        dpg.configure_item("dir_updater_value", default_value=db.dir)
         for e in self.explorers:
             e.preview = path
-            e.dir = self.data['dir']
-        dpg.configure_item("dir_updater_value", default_value=self.data['dir'])
+            e.dir = db.dir
         return path
 
     def callback_update_dir_path(self):
-        self.data['dir'] = self.filedialog.dialog_dir()
-        dpg.configure_item("dir_updater_value", default_value=self.data['dir'])
+        db.dir = self.filedialog.dialog_dir()
+        dpg.configure_item("dir_updater_value", default_value=db.dir)
         if self._data_dir_path_exists():
-            tools.config.add("DATA", "dir", self.data['dir'])
-            self.data['invalid_dir'] = False
+            tools.config.add("DATA", "dir", db.dir)
 
     def callback_open_data(self):
         json = self.filedialog.dialog_json()
@@ -111,29 +93,36 @@ class Viewer:
             for key in tools.config.keys(s):
                 filt['filters'][key] = tools.config.get(s, key, fallback='')
 
-            def delete_menu_filter():
-                tools.config.delete_section(s)
+            def delete_menu_filter(sender, app_date, user_data):
+                tools.config.delete_section(user_data)
                 self.update_menu_filters()
 
-            def create_filter():
-                self.explorers.append(Explorer(self.data, filt))
+            def get_other_explorers():
+                return self.explorers
 
-            dpg.add_menu_item(parent="filter_menu", label=name, callback=create_filter)
-            dpg.add_menu_item(parent="filter_menu_delete", label=name, callback=delete_menu_filter)
+            def open_filter(sender, app_date, user_data):
+                self.explorers.append(Explorer(user_data, get_other_explorers))
+                self._data_dir_path_exists()
+
+            dpg.add_menu_item(parent="filter_menu", label=name, callback=open_filter, user_data=filt)
+            dpg.add_menu_item(parent="filter_menu_delete", label=name, callback=delete_menu_filter, user_data=s)
 
         dpg.configure_item("filter_menu_delete", show=len(sections) > 0)
 
     def create_menu_bar(self):
         with dpg.viewport_menu_bar():
             def show_dir_updater():
-                dpg.show_item("dir_updater")
-                dpg.focus_item("dir_updater")
+                if not self._data_dir_path_exists():
+                    dpg.show_item("dir_updater")
+                    dpg.focus_item("dir_updater")
 
             with dpg.menu(label="File"):
                 dpg.add_menu_item(label="Open", callback=self.callback_open_data)
                 dpg.add_menu_item(label="Scan", callback=self.callback_scan_data)
-                dpg.add_separator(tag="dir_check1")
-                dpg.add_menu_item(tag="dir_check2", label="Update data dir", callback=show_dir_updater)
+                dpg.add_separator()
+                dpg.add_menu_item(label="Update data dir", callback=show_dir_updater)
+                dpg.add_separator()
+                dpg.add_menu_item(label="Exit", callback=dpg.destroy_context)
 
             def create_filter_window():
                 if self.filter is None:

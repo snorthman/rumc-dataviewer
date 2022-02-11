@@ -16,12 +16,10 @@ class Filter:
 
             self.menu = dpg.add_menu(label="Add key...")
             dpg.add_separator()
+            dpg.add_text('OR \',\'; NOT \'!\')')
 
             with dpg.table(pad_outerX=True):
-                dpg.add_table_column(width_fixed=True)
-                dpg.add_table_column(label="key", width_fixed=True)
-                dpg.add_table_column(label="contains", width_stretch=True)
-
+                [dpg.add_table_column(label=l, width_fixed=True) for l in ['', 'key', 'contains']]
                 self.rows = []
                 for v in tools.dicom_kvp.values():
                     with dpg.table_row(show=False, user_data=v) as r:

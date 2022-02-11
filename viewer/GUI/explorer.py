@@ -1,4 +1,4 @@
-import webbrowser, os
+import webbrowser, threading
 
 import dearpygui.dearpygui as dpg
 from thefuzz import fuzz
@@ -7,29 +7,32 @@ import numpy as np
 
 import SimpleITK as sitk
 
+from .. import db
 from .. import tools
 
 whitelist_data_keys = {"type", "sequence", "dob", "gender", "date"}
 sitki = sitk.ImageFileReader()
 
 class Explorer:
-    def __init__(self, data, filter_info=None):
+    def __init__(self, filter_info=None, explorer_func=None):
         no_filter = filter_info is None
-        self.data = data['patients']
-        self.dir = data['dir']
+        self.data = range(len(db.patients))
+        self.dir = db.dir
         self.preview = False
+        self.nodes = {}
+
         if no_filter:
             self.filter = None
+            self.name = "Explorer"
         else:
-            print(filter_info)
             self.filter = filter_info['filters'].copy()
+            self.name = f"Filter: {filter_info['name']}"
             for f in self.filter:
                 self.filter[f] = [s.strip() for s in self.filter[f].split(',')]
 
         self.stats = dict()
 
-        with dpg.window(label=f"Explorer ({len(self.data)} patients)" if no_filter else "Filter:" + filter_info['name'],
-                        autosize=True, min_size=[220, 100], no_close=no_filter) as self.w:
+        with dpg.window(label=self.name, autosize=True, min_size=[220, 100], no_close=no_filter, max_size=[1000, 768]) as self.w:
             # Filter header
             if not no_filter:
                 with dpg.collapsing_header(label="Filter"):
@@ -38,79 +41,109 @@ class Explorer:
                         for k, v in self.filter.items():
                             with dpg.table_row():
                                 dpg.add_text(k)
-                                dpg.add_text(', '.join(v))
+                                dpg.add_input_text(default_value=', '.join(v), readonly=True, width=150)
+                dpg.add_separator()
 
-            # Stats var
-            stats_id = dpg.add_collapsing_header(label="Statistics")
-            stats_patients = len(self.data)
-            stats_studies = []
-            stats_series = []
-            stats_hits = []
+            self.scanning = dpg.add_text(f"(0/{len(self.data)})")
+        threading.Thread(target=self.scan).start()
 
-            dpg.add_separator()
+    def populate(self):
+        n_patients = len(self.data)
+        d_patients = len(str(n_patients))
 
-            # Tree view
-            for p in self.data:
-                if len(p['data']) == 0:
-                    continue
-                stats_studies.append(len(p['data']))
-                hits = [0 for _ in range(stats_studies[-1])]
+        for i, p in enumerate(self.data):
+            id = db.patients[p]['id']
+            patient = db.patients[p]['data']
+            studies = len(patient)
+            idx = str(i + 1).rjust(d_patients, ' ')
+            if studies == 0:
+                continue
+            if studies == 1:
+                studies = f"{studies} study"
+            else:
+                studies = f"{studies} studies"
 
-                node_patient = dpg.add_tree_node(label=f"{p['id']} ({len(p['data'])} studies)")
-                for i, study in enumerate(p['data'].keys()):
-                    stats_series.append(len(p['data'][study]))
+            node_patient = dpg.add_tree_node(label=f"{idx} ~ {id} ({studies})", parent=self.w,
+                                             user_data={'id': id, 'patient': patient})
+            with dpg.item_handler_registry() as handler:
+                dpg.add_item_toggled_open_handler(callback=self.callback_patient_node, user_data=node_patient)
+            dpg.bind_item_handler_registry(node_patient, handler)
 
-                    node_study = dpg.add_tree_node(label=f"study {i}", parent=node_patient)
-                    for serie in p['data'][study].keys():
-                        item = p['data'][study][serie]
-                        item['header'] = f"{p['id']}/study {i}/{item.get('description')}"
-                        leaf = dpg.add_button(label=item.get('description'), parent=node_study, small=True,
-                                              user_data=item,
-                                              callback=self._explorer_callback)
-                        # Apply filter
-                        if not no_filter:
-                            if self.apply_filter(item):
-                                dpg.bind_item_theme(leaf, "theme_filter")
-                                hits[i] += 1
+        dpg.configure_item(self.w, label=f"{self.name} ({n_patients} results)")
 
-                    if hits[i] > 0:
-                        dpg.configure_item(node_study, label=f"study {i} ({hits[i]} matches)")
-                stats_hits.append(sum(hits))
-                if not no_filter and sum(hits) == 0:
-                    dpg.delete_item(node_patient)
+    def scan(self):
+        def can_apply_filter(p):
+            patient = db.patients[p]['data']
+            for study in patient.keys():
+                for serie in patient[study].keys():
+                    item = patient[study][serie]
+                    if self.apply_filter(item):
+                        return p
+            return -1
 
-            # Stats header
-            stats = [("# patients", stats_patients),
-                     ("# studies", sum(stats_studies)),
-                     ("# studies per patient", sum(stats_studies) / len(stats_studies)),
-                     ("# series", sum(stats_series)),
-                     ("# series per study", sum(stats_series) / len(stats_series)),
-                     ("# matches", sum(stats_hits))]
-            with dpg.table(parent=stats_id, header_row=False, borders_innerV=True):
-                [dpg.add_table_column(width_fixed=True) for _ in range(2)]
-                for s in stats:
-                    if s[1] > 0:
-                        with dpg.table_row():
-                            dpg.add_text(s[0])
-                            dpg.add_text(str(round(s[1], 2)))
+        lenp = len(db.patients)
+        if self.filter is not None:
+            self.data = []
+            for p in range(lenp):
+                if can_apply_filter(p) >= 0:
+                    self.data.append(p)
+                dpg.configure_item(self.scanning, default_value=f"({p + 1}/{lenp})")
+
+        dpg.delete_item(self.scanning)
+        self.populate()
 
     def apply_filter(self, item):
         for key in self.filter:
+            found = False
             v = item.get(key, None)
             if v is None:
                 continue
-            for f in self.filter[key]:
-                if fuzz.partial_token_sort_ratio(v, f) >= 80:
-                    return True
-        return False
 
-    def _explorer_callback(self, sender, app_data, user_data):
+            for f in self.filter[key]:
+                negation = f.startswith('!')
+                if negation and fuzz.partial_token_sort_ratio(v, f) < 100:
+                    found = True
+                    break
+                if not negation and fuzz.partial_token_sort_ratio(v, f) == 100:
+                    found = True
+                    break
+
+            if not found:
+                return False
+        return True
+
+
+    def callback_patient_node(self, sender, app_data, user_data):
+        if user_data is not None:
+            dpg.set_item_user_data(sender, None)
+
+            data = dpg.get_item_user_data(user_data)
+            patient = data['patient']
+            for i, study in enumerate(patient.keys()):
+                node_study = dpg.add_tree_node(label=f"study {i}", parent=user_data)
+                matches = 0
+                for serie in patient[study].keys():
+                    item = patient[study][serie]
+                    item['header'] = f"{data['id']}/study {i}/{item.get('description')}"
+                    leaf = dpg.add_button(label=item.get('description'), parent=node_study, small=True,
+                                          user_data=item,
+                                          callback=self.callback_item)
+                    # Apply filter
+                    if self.filter:
+                        if self.apply_filter(item):
+                            dpg.bind_item_theme(leaf, "theme_filter")
+                            matches += 1
+                match_text = f"({matches} matches)" if matches > 1 else f"(1 match)"
+                if matches > 0:
+                    dpg.configure_item(node_study, label=f"study {i} {match_text}")
+
+    def callback_item(self, sender, app_data, user_data):
         with dpg.window(label=user_data.get('header'), autosize=True):
             with dpg.table(header_row=False, pad_outerX=True) as t:
                 dpg.add_table_column(label="key", width_fixed=True)
                 dpg.add_table_column(label="value")
                 with dpg.table_row():
-                    dpg.add_button(label="Expand", user_data=t, callback=self._expand_item_callback)
+                    dpg.add_button(label="Expand", user_data=t, callback=self.callback_expand_item)
 
                 with dpg.table_row(user_data=True):
                     dpg.add_text("dicoms")
@@ -133,13 +166,8 @@ class Explorer:
                 with dpg.plot(label=user_data['dcm'], height=img.shape[0] * 2, width=img.shape[1] * 2):
                     ax = [dpg.add_plot_axis(axis, no_tick_marks=True) for axis in [dpg.mvXAxis, dpg.mvYAxis]]
                     dpg.draw_image(tex, pmin=[0, 0], pmax=[1, 1])#img.shape)
-                    # [dpg.set_axis_limits(ax[i], 0, img.shape[i]) for i in range(len(ax))]
 
-
-
-            # reader.SetFileName(inputImageFileName)
-
-    def _expand_item_callback(self, sender, app_data, user_data):
+    def callback_expand_item(self, sender, app_data, user_data):
         rows = dpg.get_item_children(user_data, 1)[1:]
         if dpg.get_item_configuration(sender).get('label') == "Expand":
             [dpg.configure_item(r, show=True) for r in rows]
