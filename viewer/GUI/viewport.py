@@ -54,7 +54,7 @@ class Viewer:
             study = fkey(a['data'])
             serie = fkey(a['data'][study])
             dcm = a['data'][study][serie]['dcm']
-            path = os.path.isfile(f"{db.dir}/{a['id']}/{study}/{serie}/{dcm}")
+            path = os.path.isfile(os.path.join(db.dir, a['id'], study, serie, dcm))
         except:
             path = False
         dpg.configure_item("dir_updater", show=not path)

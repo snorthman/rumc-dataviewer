@@ -1,18 +1,11 @@
-import random
-import sqlite3, json, datetime, os, re, threading, queue
+import sqlite3, datetime, os, re
 import multiprocessing as mp
-import time
+from tqdm import tqdm
 
 import pandas as pd
-from tqdm import tqdm
-from pathlib import Path
-
 import SimpleITK as sitk
 
-with open(Path(__file__).parent.joinpath("dicom_kvp.json"), "r") as assetfile:
-    dicom_kvp = json.load(assetfile)
-
-INCLUDE_TAGS = {    # Attributes
+INCLUDE_TAGS = {  # Attributes
     "0008|0005": "Specific Character Set",
     "0008|0008": "Image Type",
     "0008|0012": "Instance Creation Date",
@@ -39,8 +32,6 @@ INCLUDE_TAGS = {    # Attributes
     "0010|0030": "Patient's Birth Date",
     "0010|0040": "Patient's Sex",
     "0010|1010": "Patient's Age",
-    "0010|1020": "Patient's Size",
-    "0010|1030": "Patient's Weight",
     "0010|21b0": "Additional Patient History",
     "0012|0062": "Patient Identity Removed",
     "0012|0063": "De-identification Method",
@@ -91,11 +82,26 @@ INCLUDE_TAGS = {    # Attributes
     "0040|0254": "Performed Procedure Step Description"
 }
 
-def connect(db):
-    conn = sqlite3.connect(db)
-    with conn:
-        c = conn.cursor()
-        # [parse_patient(conn.cursor(), d) for d in data[:5]]
+TABLENAME = "RUMC_PROSTATE_MPMRI"
+
+
+class Connection:
+    def __init__(self, db):
+        self._conn = sqlite3.connect(db)
+        self._c = self._conn.cursor()
+
+    def __del__(self):
+        self._conn.close()
+
+    def select(self, **kvp):
+        q = []
+        for key, value in kvp.items():
+            values = value.split(',')
+            values = [f"{key} LIKE '%{v}%'" for v in values]
+            values = ' OR '.join(values)
+            q.append(f"({values})")
+        Q = f"SELECT * FROM {TABLENAME} WHERE {' AND '.join(q)} ORDER BY Patient_ID"
+        return self._c.execute(Q).fetchall()
 
 
 def is_dicom(name):
@@ -103,11 +109,11 @@ def is_dicom(name):
 
 
 def header_to_date(header):
+    header = str(header)
     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
 
 def find_dicom_dir(path):
-    time.sleep(0.01)
     dicoms = []
     for item in os.scandir(path):  # type: os.DirEntry
         if item.is_dir():
@@ -115,6 +121,16 @@ def find_dicom_dir(path):
         if item.is_file() and is_dicom(item.name):
             return [path]
     return dicoms
+
+
+def convert_val(header, val):
+    try:
+        return int(val)
+    except ValueError:
+        if 'Date' in header:
+            return datetime.datetime(int(val[:4]), int(val[4:6]), int(val[6:]))
+        else:
+            return val.strip()
 
 
 def dicom_dir_to_row(path):
@@ -128,41 +144,52 @@ def dicom_dir_to_row(path):
         print(f"EXCEPTION (skipping): {path}")
         return dict()
 
-    headers = {'count': len(ls)}
+    headers = {'Series_Length': len(ls), 'Path': path}
     for key, header in INCLUDE_TAGS.items():
         try:
-            val = reader.GetMetaData(key)
             header = header.replace(' ', '_').strip()
-            if 'Date' in header:
-                val = header_to_date(val)
-            headers[header] = val.strip()
+            headers[header] = convert_val(header, reader.GetMetaData(key))
         except RuntimeError:
             headers[header] = None
-            continue
 
     return headers
 
 
-def create(folder):
-    conn = sqlite3.connect("data.db")
-    dossiers = [d.path for d in filter(lambda a: a.is_dir(), os.scandir(folder))]
+def create(path = None, parallel = True):
+    try:
+        path = os.getcwd() if path is None else path
+        conn = sqlite3.connect(f"{TABLENAME}.db")
+        dossiers = [d.path for d in filter(lambda a: a.is_dir(), os.scandir(path))]
 
-    pool = mp.Pool(mp.cpu_count())
-    with pool:
-        print(f"Gathering DICOM directories from {folder}")
-        dicom_dirs = []
-        for result in tqdm(pool.map(find_dicom_dir, dossiers), total=len(dossiers), delay=1):
-            dicom_dirs.extend(result)
-        print(f"Creating database from {len(dicom_dirs)} DICOM directories")
-        rows = []
-        for result in tqdm(pool.imap_unordered(dicom_dir_to_row, dicom_dirs), total=len(dicom_dirs)):
-            rows.append(result)
+        if parallel:
+            pool = mp.Pool(mp.cpu_count())
+            print(f"Running {mp.cpu_count()} cpus for job.")
+        # else:
+            # dicom_dirs = []
+            # for result in tqdm([find_dicom_dir(d) for d in dossiers], total=len(dossiers)):
+            #     dicom
+        with pool:
+            print(f"Gathering DICOM directories from {path}")
+            dicom_dirs = []
+            for result in tqdm(pool.imap_unordered(find_dicom_dir, dossiers), total=len(dossiers)):
+                dicom_dirs.extend(result)
+            print(f"Creating database from {len(dicom_dirs)} DICOM directories")
+            rows = []
+            for result in tqdm(pool.imap_unordered(dicom_dir_to_row, dicom_dirs), total=len(dicom_dirs)):
+                rows.append(result)
 
-    df = pd.DataFrame.from_dict(rows, orient='columns')
-    print(f"Writing {len(rows)} rows to SQL database.")
-    with conn:
-        df.to_sql(name="RUMC2014-2020", con=conn, if_exists='replace')
-    print("SQL Database created.")
+        df = pd.DataFrame.from_dict(rows, orient='columns')
+        print(f"Writing {len(rows)} rows to SQL database.")
+        with conn:
+            conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
+            df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
+        print("SQL Database created.")
+    except Exception as e:
+        print(e)
+
 
 if __name__ == '__main__':
-    create("D:/Repos/RUMCDataViewer/test")
+    # create("D:/Repos/RUMCDataViewer/test")
+    C = Connection("D:\\Repos\\RUMCDataViewer\\viewer\\tools\\RUMC_PROSTATE_MPMRI.db")
+    result = C.select(Series_Description='naald,nld')
+    pass
