@@ -87,6 +87,7 @@ tags_dcm = {  # Attributes
 #     print(x)
 
 TABLENAME = "RUMC_PROSTATE_MPMRI"
+ORDER_BY = "PatientID,SeriesInstanceUID,StudyInstanceUID,StudyTime,SeriesTime"
 
 
 class Connection:
@@ -107,18 +108,26 @@ class Connection:
             R.append(item)
         return R
 
-    def select(self, **kvp):
+    def select(self, include_siblings=True, **kvp):
         q = []
         for key, value in kvp.items():
             values = value.split(',')
             values = [f"{key} LIKE '%{v}%'" for v in values]
             values = ' OR '.join(values)
             q.append(f"({values})")
-        Q = f"SELECT * FROM {TABLENAME} WHERE {' AND '.join(q)} ORDER BY PatientID"
+        selection = 'StudyInstanceUID,SeriesInstanceUID' if include_siblings else '*'
+        Q = f"SELECT {selection} FROM {TABLENAME} WHERE {' AND '.join(q)} ORDER BY {ORDER_BY}"
+        if include_siblings:
+            R = self._c.execute(Q).fetchall()
+            studies, series = set(), []
+            for study, serie in R:
+                series.append(serie)
+                studies.add(study)
+            return self.select(include_siblings=False, StudyInstanceUID=','.join([s for s in set(studies)])), series
         return self._refactor_result(self._c.execute(Q).fetchall())
 
     def select_all(self):
-        Q = f"SELECT * FROM {TABLENAME} ORDER BY PatientID"
+        Q = f"SELECT * FROM {TABLENAME} ORDER BY {ORDER_BY}"
         return self._refactor_result(self._c.execute(Q).fetchall())
 
 
@@ -162,7 +171,7 @@ def dicom_dir_to_row(path):
         print(f"EXCEPTION (skipping): {path}")
         return dict()
 
-    headers = {'SeriesLength': len(ls), 'Path': path}
+    headers = {'SeriesLength': len(ls), 'Path': path, 'Sample': ls[-1]}
     for key, header in tags_dcm.items():
         try:
             header = header.replace(' ', '_').strip()

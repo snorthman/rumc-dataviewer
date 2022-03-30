@@ -14,7 +14,7 @@ whitelist_data_keys = {"type", "sequence", "dob", "gender", "date"}
 sitki = sitk.ImageFileReader()
 
 class Explorer:
-    def __init__(self, filter_info=None, explorer_func=None):
+    def __init__(self, items):
         no_filter = filter_info is None
         self.data = range(len(db.patients))
         self.dir = db.dir

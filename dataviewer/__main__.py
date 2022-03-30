@@ -9,9 +9,10 @@ from pathlib import Path
 
 valid_keys = db.tags_dcm.values()
 
+
 @click.group()
 def cli():
-  pass
+    pass
 
 
 @cli.command(name='new')
@@ -23,56 +24,61 @@ def new(input: Path, name: str):
     """Create a database given a RUMC data directory."""
     db.create(name, input)
 
+
 @cli.command(name='load')
 @click.option('-i', '--input', 'input', type=click.Path(resolve_path=True, path_type=Path, exists=True, dir_okay=False),
-              help="Load and view a RUMC database file", prompt='Enter RUMC database file (create using the \'new\' command)')
-@click.option('-a', '--all', 'all', type=bool,
+              help="Load and view a RUMC database file",
+              prompt='Enter RUMC database file (create using the \'new\' command)')
+@click.option('-a', '--all', 'all', is_flag=True,
               help="View entire database without selections")
-def load(input: Path, all: bool):
+@click.option('-s', '--select', 'selection', multiple=True, type=str)
+def load(input: Path, all: bool, selection):
     """Load a database for later use."""
     try:
-        click.echo('Create a selection by submitting a list of dicom metadata key=value items')
-        click.echo('Valid keys are found in keys.txt (case sensitive!)\n')
-        click.echo('e.g. SeriesDescription=naald,nld\n')
-        click.echo('creates a selection of series where dicom metadata Series Description contains either \'naald\' or \'nld\'')
-        click.echo('A blank input is considered the end of the list of key=value items\n')
         kvp = {}
-        while True:
-            value = click.prompt(f'key=value ({len(kvp) + 1})', type=str, default='')
-            if len(value) > 0:
-                if '=' in value:
-                    if not value.endswith('='):
-                        k, v = value.split('=', maxsplit=1)
-                        if k in valid_keys:
-                            kvp[k] = v
-                        else:
-                            click.echo('Ignored input, invalid key')
-                    else:
-                        click.echo('Ignored input, empty value')
-                else:
-                    click.echo('Ignored input, no \'=\' found')
+        if not all:
+            if len(selection) > 0:
+                for value in selection:
+                    k, v = process_selection(value)
+                    kvp[k] = v
             else:
-                break
+                click.echo('Create a selection by submitting a list of dicom metadata key=value items')
+                click.echo('Valid keys are found in keys.txt (case sensitive!)\n')
+                click.echo('e.g. SeriesDescription=naald,nld\n')
+                click.echo(
+                    'creates a selection of series where dicom metadata Series Description contains either \'naald\' or \'nld\'')
+                click.echo('A blank input is considered the end of the list of key=value items\n')
+                while value := click.prompt(f'key=value ({len(kvp) + 1})', type=str, default='') > 0:
+                    k, v = process_selection(value)
+                    kvp[k] = v
 
         C = db.Connection(input)
         if len(kvp) > 0:
-            Viewer(C.select(**kvp)).run()
+            selection, series = C.select(**kvp)
+            Viewer(selection, kvp, series).run()
         else:
             Viewer(C.select_all()).run()
     except Exception as e:
         click.echo(e)
 
 
-
-# @cli.command(name='wel')
-# def welcome():
-#     click.echo('Welcome')
+def process_selection(value: str):
+    if len(value) > 0:
+        if '=' in value:
+            if not value.endswith('='):
+                k, v = value.split('=', maxsplit=1)
+                if k in valid_keys:
+                    return k, v
+                else:
+                    click.echo('Ignored input, invalid key')
+            else:
+                click.echo('Ignored input, empty value')
+        else:
+            click.echo('Ignored input, no \'=\' found')
 
 
 if __name__ == '__main__':
     cli()
-
-
 
 # @click.command()
 # @click.option('--new', 'path', type=click.Path(resolve_path=True, path_type=pathlib.Path))
