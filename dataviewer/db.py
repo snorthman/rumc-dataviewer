@@ -1,12 +1,11 @@
-import sqlite3, datetime, os, re
-import multiprocessing as mp
-import click
+import sqlite3, datetime, os, re, multiprocessing as mp
 
+import click
 import pandas as pd
 import SimpleITK as sitk
 from tqdm import tqdm
 
-tags_dcm = {  # Attributes
+dcm_tags = {  # Attributes
     "0008|0005": "SpecificCharacterSet",
     "0008|0008": "ImageType",
     "0008|0012": "InstanceCreationDate",
@@ -91,9 +90,10 @@ ORDER_BY = "PatientID,SeriesInstanceUID,StudyInstanceUID,StudyTime,SeriesTime"
 
 
 class Connection:
-    def __init__(self, path: str):
+    def __init__(self, path):
         self._conn = sqlite3.connect(os.path.abspath(path))
         self._c = self._conn.cursor()
+        self.name = path.name
 
     def __del__(self):
         self._conn.close()
@@ -172,7 +172,7 @@ def dicom_dir_to_row(path):
         return dict()
 
     headers = {'SeriesLength': len(ls), 'Path': path, 'Sample': ls[-1]}
-    for key, header in tags_dcm.items():
+    for key, header in dcm_tags.items():
         try:
             header = header.replace(' ', '_').strip()
             headers[header] = convert_val(header, reader.GetMetaData(key))

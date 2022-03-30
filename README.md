@@ -2,5 +2,6 @@
  
 ```
 pip install .
-python app.py
+dataviewer --help
+dataviewer new --help
 ```

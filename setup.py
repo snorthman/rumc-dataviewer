@@ -1,13 +1,18 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name='RUCMDataViewer',
     version='1.0',
-    packages=['viewer'],
     url='',
     license='',
     author='C.R. Noordman',
     author_email='stan.noordman@radboudumc.nl',
-    description='View data downloaded from RUMC',
-    install_requires=['dearpygui', 'SimpleITK', 'thefuzz', 'gdcm', 'pylibjpeg', 'pydicom', 'numpy'],
+    description='View and setup data downloaded from RUMC',
+    packages=find_packages(),
+    include_package_data=True,
+    entry_points={
+        'console_scripts': [
+            'dataviewer = dataviewer:cli',
+        ]
+    }
 )

@@ -114,5 +114,6 @@ dmypy.json
 .pyre/
 
 test/
-DATA_*.json
-DATA_DReposRUMCDataViewertest.json
+.idea/
+
+*.db
