@@ -1,4 +1,6 @@
 # RUMCDataViewer
+
+Use Py3.6 or later
  
 ```
 pip install .
