@@ -82,11 +82,8 @@ dcm_tags = {  # Attributes
     "0040|0254": "PerformedProcedureStepDescription"
 }
 
-# for x in tags_dcm.values():
-#     print(x)
-
 TABLENAME = "RUMC_PROSTATE_MPMRI"
-ORDER_BY = "PatientID,SeriesInstanceUID,StudyInstanceUID,StudyTime,SeriesTime"
+ORDER_BY = "SeriesTime,StudyTime,StudyInstanceUID,SeriesInstanceUID,PatientID"
 
 
 class Connection:

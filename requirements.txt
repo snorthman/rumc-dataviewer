@@ -1,0 +1,10 @@
+click==8.1.1
+dataviewer==0.4.8
+dearpygui==1.3.1
+numpy==1.22.3
+pandas==1.4.1
+pydicom==2.2.2
+SimpleITK==2.1.1
+tqdm==4.63.1
+GDCM==1.1
+pylibjpeg==1.4.0

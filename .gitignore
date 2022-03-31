@@ -114,6 +114,5 @@ dmypy.json
 .pyre/
 
 test/
-.idea/
 
 *.db
