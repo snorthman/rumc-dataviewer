@@ -7,7 +7,7 @@ import numpy as np
 
 sitks = sitk.ImageSeriesReader()
 texture_registry = set()
-whitelist = ['SeriesLength', 'StudyDate', 'StudyTime', 'SeriesDate', 'SeriesTime', 
+whitelist = ['SeriesLength', 'StudyDate', 'StudyTime', 'SeriesDate', 'SeriesTime',
              'Modality', 'Manufacturer', 'ManufacturersModelName', 'SequenceName',
              'PatientID', 'StudyDescription', 'SeriesDescription']
 viewport_size = [1024, 768]
@@ -155,7 +155,7 @@ def callback_item(sender, _, user_data: dict):
 
             # explore to path
             path = user_data['Path']
-            dpg.add_button(label=path, enabled=os.path.exists(path), width=max_item_width - 0,
+            dpg.add_button(label='Open in explorer', enabled=os.path.exists(path), width=max_item_width - 0,
                        callback=lambda: webbrowser.open(path))
 
         except Exception as e:
