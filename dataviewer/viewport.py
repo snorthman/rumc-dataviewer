@@ -7,7 +7,7 @@ import numpy as np
 
 sitks = sitk.ImageSeriesReader()
 texture_registry = set()
-whitelist = ['SeriesLength', 'StudyDate', 'SeriesDate', 'StudyTime', 'StudyDate',
+whitelist = ['SeriesLength', 'StudyDate', 'StudyTime', 'SeriesDate', 'SeriesTime', 
              'Modality', 'Manufacturer', 'ManufacturersModelName', 'SequenceName',
              'PatientID', 'StudyDescription', 'SeriesDescription']
 viewport_size = [1024, 768]
@@ -103,7 +103,6 @@ class Viewer:
     def run(self):
         self.create_menu_bar()
         self.create_explorer()
-        dpg.show_style_editor()
 
         def on_exit():
             pass

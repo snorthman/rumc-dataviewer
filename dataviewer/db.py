@@ -152,12 +152,12 @@ def find_dicom_dir(path):
 
 def convert_val(header, val):
     try:
-        return int(val)
-    except ValueError:
         if 'Date' in header:
             return datetime.datetime(int(val[:4]), int(val[4:6]), int(val[6:]))
-        else:
-            return val.strip()
+        # if 'Time' in header:
+        #     return f'{val[0:2]}:{val[2:4]}:{val[4:6]}.{int(val[7:])}'
+    finally:
+        return val.strip()
 
 
 def dicom_dir_to_row(path):
