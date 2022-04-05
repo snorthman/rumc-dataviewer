@@ -1,5 +1,4 @@
 click==8.1.1
-dataviewer==0.4.8
 dearpygui==1.3.1
 numpy==1.22.3
 pandas==1.4.1

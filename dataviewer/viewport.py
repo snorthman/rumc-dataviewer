@@ -177,6 +177,8 @@ def callback_item(sender, _, user_data: dict):
             path = user_data['Path']
             dpg.add_button(label='Open in explorer', enabled=os.path.exists(path), width=200,
                            callback=lambda: webbrowser.open(path))
+            with dpg.tooltip(dpg.last_item()):
+                dpg.add_text(path)
 
         except Exception as e:
             exception_text('Failed to read this series', e)
@@ -191,9 +193,9 @@ def callback_item(sender, _, user_data: dict):
             with dpg.plot(label=user_data['Sample'], height=img.shape[0] * 2, width=img.shape[1] * 2):
                 [dpg.add_plot_axis(axis, no_tick_marks=True) for axis in [dpg.mvXAxis, dpg.mvYAxis]]
                 dpg.draw_image(tex, pmin=[0, 0], pmax=[1, 1])  # img.shape)
-
         except Exception as e:
             exception_text('Failed to load DICOM image for preview', e)
+
     callback_items[sender] = w
 
 

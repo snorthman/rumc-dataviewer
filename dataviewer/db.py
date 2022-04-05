@@ -3,7 +3,11 @@ import sqlite3, datetime, os, re, multiprocessing as mp
 import click
 import pandas as pd
 import SimpleITK as sitk
+import pydicom
 from tqdm import tqdm
+
+ifr = sitk.ImageFileReader()
+ifr.LoadPrivateTagsOn()
 
 dcm_tags = {  # Attributes
     "0008|0005": "SpecificCharacterSet",
@@ -86,6 +90,14 @@ TABLENAME = "RUMC_PROSTATE_MPMRI"
 ORDER_BY = "SeriesTime,StudyTime,StudyInstanceUID,SeriesInstanceUID,PatientID"
 
 
+def get_pydicom_value(data: pydicom.dataset.FileDataset, key: str):
+    key = '0x' + key.replace('|', '')
+    if key in data:
+        result = data[key]
+        return result.value if not result.is_empty else None
+    return None
+
+
 class Connection:
     def __init__(self, path):
         self._conn = sqlite3.connect(os.path.abspath(path))
@@ -128,8 +140,16 @@ class Connection:
         return self._refactor_result(self._c.execute(Q).fetchall())
 
 
-def is_dicom(name):
-    return re.fullmatch(r'\d+\.dcm', name)
+def is_dicom(path):
+    try:
+        pydicom.dcmread(path, specific_tags=['0x00080005'])
+    except:
+        try:
+            ifr.SetFileName(path)
+            ifr.ReadImageInformation()
+        except:
+            return False
+    return True
 
 
 def header_to_date(header):
@@ -137,12 +157,12 @@ def header_to_date(header):
     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
 
-def find_dicom_dir(path):
+def find_dicom(path):
     dicoms = []
     for item in os.scandir(path):  # type: os.DirEntry
         if item.is_dir():
-            dicoms.extend(find_dicom_dir(item.path))
-        if item.is_file() and is_dicom(item.name):
+            dicoms.extend(find_dicom(item.path))
+        if item.is_file() and is_dicom(item.path):
             return [path]
     return dicoms
 
@@ -159,27 +179,32 @@ def convert_val(header, val):
 
 def dicom_dir_to_row(path):
     ls = list(filter(lambda a: is_dicom(a), os.listdir(path)))
-    try:
-        reader = sitk.ImageFileReader()
-        reader.SetFileName(os.path.join(path, ls[-1]))
-        reader.LoadPrivateTagsOn()
-        reader.ReadImageInformation()
-    except:
-        print(f"EXCEPTION (skipping): {path}")
-        return dict()
+    ls1 = os.path.join(path, ls[-1])
+    headers = {'SeriesLength': len(ls), 'Path': path, 'Sample': ls1}
 
-    headers = {'SeriesLength': len(ls), 'Path': path, 'Sample': ls[-1]}
+    try:
+        dcm = pydicom.dcmread(ls1)
+        get_metadata = lambda key: get_pydicom_value(dcm, key)
+    except:
+        try:
+            ifr.SetFileName(ls1)
+            ifr.ReadImageInformation()
+            get_metadata = lambda key: ifr.GetMetaData(key)
+        except:
+            print(f"EXCEPTION (skipping): {path}")
+            return headers
+
     for key, header in dcm_tags.items():
         try:
             header = header.replace(' ', '_').strip()
-            headers[header] = convert_val(header, reader.GetMetaData(key))
+            headers[header] = convert_val(header, get_metadata(key))
         except RuntimeError:
             headers[header] = None
 
     return headers
 
 
-def create(name: str, path = None, parallel = True):
+def create(name: str, path=None, parallel=True):
     try:
         path = os.path.abspath(os.getcwd() if path is None else path)
         conn = sqlite3.connect(f"{name}.db")
@@ -191,7 +216,7 @@ def create(name: str, path = None, parallel = True):
         with pool:
             click.echo(f"Gathering DICOM directories from {path}")
             dicom_dirs = []
-            for result in pool.imap_unordered(find_dicom_dir, dossiers):
+            for result in tqdm(pool.imap_unordered(find_dicom, dossiers), total=len(dossiers)):
                 dicom_dirs.extend(result)
             click.echo(f"Creating database from {len(dicom_dirs)} DICOM directories")
             rows = []
