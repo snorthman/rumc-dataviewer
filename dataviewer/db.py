@@ -215,7 +215,8 @@ def create(name: str, path=None, parallel=True):
                 for filename in [f for f in filenames if f.endswith(".dcm")]:
                     dpath = dirpath.split(path)[1]
                     dcms[dpath] = dcms.get(dpath, []) + [filename]
-                    bar.update(len(dcms.keys()))
+                    bar.n = len(dcms.keys())
+                    bar.refresh()
 
         # Create Dossier items
         dossiers = []
