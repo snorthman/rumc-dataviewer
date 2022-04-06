@@ -238,7 +238,7 @@ def create(input: Path, output: Path, parallel=True):
         with conn:
             conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
             df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
-        click.echo(f"Database created at {os.path.join(os.getcwd(), output)}.db")
+        click.echo(f"Database created at {os.path.join(os.getcwd(), output)}")
     except Exception as e:
         click.echo(e)
 
