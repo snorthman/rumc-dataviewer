@@ -140,94 +140,100 @@ class Connection:
         return self._refactor_result(self._c.execute(Q).fetchall())
 
 
-def is_dicom(path):
-    try:
-        pydicom.dcmread(path, specific_tags=['0x00080005'])
-    except:
+class Dossier:
+    def __init__(self, path: str, dcms: list):
+        self.dir = path
+        self.sample = dcms[-1]
+        self.samplep = os.path.join(path, self.sample)
+        self.dcms = dcms
+
+    def __len__(self):
+        return len(self.dcms)
+
+    def is_valid(self):
         try:
-            ifr.SetFileName(path)
-            ifr.ReadImageInformation()
+            pydicom.dcmread(self.samplep, specific_tags=['0x00080005'])
         except:
-            return False
-    return True
+            try:
+                ifr.SetFileName(self.samplep)
+                ifr.ReadImageInformation()
+            except:
+                return False
+        return True
 
-
-def header_to_date(header):
-    header = str(header)
-    return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
-
-
-def find_dicom(path):
-    dicoms = []
-    for item in os.scandir(path):  # type: os.DirEntry
-        if item.is_dir():
-            dicoms.extend(find_dicom(item.path))
-        if item.is_file() and is_dicom(item.path):
-            return [path]
-    return dicoms
-
-
-def convert_val(header, val):
-    try:
-        if 'Date' in header:
-            return datetime.datetime(int(val[:4]), int(val[4:6]), int(val[6:]))
-        # if 'Time' in header:
-        #     return f'{val[0:2]}:{val[2:4]}:{val[4:6]}.{int(val[7:])}'
-    finally:
-        return val.strip()
-
-
-def dicom_dir_to_row(path):
-    ls = list(filter(lambda a: is_dicom(a), os.listdir(path)))
-    ls1 = os.path.join(path, ls[-1])
-    headers = {'SeriesLength': len(ls), 'Path': path, 'Sample': ls1}
-
-    try:
-        dcm = pydicom.dcmread(ls1)
-        get_metadata = lambda key: get_pydicom_value(dcm, key)
-    except:
+    def dossier_to_row(self):
         try:
-            ifr.SetFileName(ls1)
-            ifr.ReadImageInformation()
-            get_metadata = lambda key: ifr.GetMetaData(key)
+            dcm = pydicom.dcmread(self.samplep)
+            get_metadata = lambda key: get_pydicom_value(dcm, key)
         except:
-            print(f"EXCEPTION (skipping): {path}")
-            return headers
+            try:
+                ifr.SetFileName(self.samplep)
+                ifr.ReadImageInformation()
+                get_metadata = lambda key: ifr.GetMetaData(key)
+            except Exception as e:
+                print(f"EXCEPTION (skipping): {self.dir}")
+                print(e)
+                return None
 
-    for key, header in dcm_tags.items():
-        try:
-            header = header.replace(' ', '_').strip()
-            headers[header] = convert_val(header, get_metadata(key))
-        except RuntimeError:
-            headers[header] = None
+        headers = {'SeriesLength': len(self), 'Path': self.dir, 'Sample': self.sample}
+        for key, header in dcm_tags.items():
+            try:
+                header = header.replace(' ', '_').strip()
+                val = get_metadata(key)
+                try:
+                    if 'Date' in header:
+                        val = datetime.datetime(int(val[:4]), int(val[4:6]), int(val[6:]))
+                    # if 'Time' in header:
+                    #     return f'{val[0:2]}:{val[2:4]}:{val[4:6]}.{int(val[7:])}'
+                finally:
+                    val = val.strip()
+                headers[header] = val
+            except:
+                headers[header] = None
 
-    return headers
+        return headers
 
+
+def dossier2row(dossier: Dossier):
+    return dossier.dossier_to_row()
+
+# def header_to_date(header):
+#     header = str(header)
+#     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
 def create(name: str, path=None, parallel=True):
     try:
         path = os.path.abspath(os.getcwd() if path is None else path)
-        conn = sqlite3.connect(f"{name}.db")
-        dossiers = [d.path for d in filter(lambda a: a.is_dir(), os.scandir(path))]
 
         pool = mp.Pool(mp.cpu_count()) if parallel else mp.Pool(1)
         click.echo(f"Running {mp.cpu_count()} cpus for job.")
 
-        with pool:
-            click.echo(f"Gathering DICOM directories from {path}")
-            dicom_dirs = []
-            for result in tqdm(pool.imap_unordered(find_dicom, dossiers), total=len(dossiers)):
-                dicom_dirs.extend(result)
-            click.echo(f"Creating database from {len(dicom_dirs)} DICOM directories")
-            rows = []
-            for result in tqdm(pool.imap_unordered(dicom_dir_to_row, dicom_dirs), total=len(dicom_dirs)):
-                rows.append(result)
+        click.echo(f"Gathering DICOMs from {path} and its subdirectories")
+        dcms = dict()
+        with tqdm() as bar:
+            for dirpath, dirnames, filenames in os.walk(path):
+                for filename in [f for f in filenames if f.endswith(".dcm")]:
+                    dpath = dirpath.split(path)[1]
+                    dcms[dpath] = dcms.get(dpath, []) + [filename]
+                    bar.update(len(dcms.keys()))
 
-        df = pd.DataFrame.from_dict(rows, orient='columns')
+        # Create Dossier items
+        dossiers = []
+        for subpath, filenames in dcms.items():
+            dossiers.append(Dossier(path + subpath, filenames))
+
+        with pool:
+            click.echo(f"Creating database from {len(dossiers)} DICOM directories")
+            rows = []
+            for result in tqdm(pool.imap_unordered(dossier2row, dossiers), total=len(dossiers)):
+                if result is not None:
+                    rows.append(result)
+
         click.echo(f"Writing {len(rows)} rows to SQL database.")
+        conn = sqlite3.connect(f"{name}.db")
         with conn:
             conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
-            df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
+            pd.DataFrame.from_dict(rows, orient='columns').to_sql(name=TABLENAME, con=conn, if_exists='replace')
         click.echo(f"Database created at {os.path.join(os.getcwd(), name)}.db")
     except Exception as e:
         click.echo(e)
