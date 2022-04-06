@@ -28,12 +28,16 @@ def keys(output: bool):
 
 @cli.command(name='new')
 @click.option('-i', '--input', 'input', type=click.Path(resolve_path=True, path_type=Path),
-              help="Read from this directory", prompt='Enter RUMC data directory')
-@click.option('-n', '--name', 'name', type=str,
-              help="Database filename, without extension.", prompt='Enter database file name', default='rumc_database')
-def new(input: Path, name: str):
+              help="Read data from this directory.", prompt='Enter path/to/data_directory', default='.')
+@click.option('-o', '--output', 'output', type=click.Path(resolve_path=True, path_type=Path),
+              help="Output database to this directory.", prompt='Enter output path/to/database', default='./rumc_database.db')
+def new(input: Path, output: Path):
     """Create a database given a RUMC data directory. Overwrites existing databases in cwd."""
-    db.create(name, input)
+    if not input.is_dir():
+        raise NotADirectoryError("Expected input to be a directory")
+    if output.is_dir():
+        raise IsADirectoryError("Expected output to be a file")
+    db.create(input.absolute(), output.with_suffix('.db').absolute())
 
 
 @cli.command(name='load')

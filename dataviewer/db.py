@@ -1,4 +1,5 @@
-import sqlite3, datetime, os, re, multiprocessing as mp
+import sqlite3, datetime, os, multiprocessing as mp
+from pathlib import Path
 
 import click
 import pandas as pd
@@ -197,23 +198,24 @@ class Dossier:
 def dossier2row(dossier: Dossier):
     return dossier.dossier_to_row()
 
+
 # def header_to_date(header):
 #     header = str(header)
 #     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
-def create(name: str, path=None, parallel=True):
+def create(input: Path, output: Path, parallel=True):
+    inputs = str(input)
     try:
-        path = os.path.abspath(os.getcwd() if path is None else path)
-
+        sqlite3.connect(output).close()
         pool = mp.Pool(mp.cpu_count()) if parallel else mp.Pool(1)
         click.echo(f"Running {mp.cpu_count()} cpus for job.")
 
-        click.echo(f"Gathering DICOMs from {path} and its subdirectories")
+        click.echo(f"Gathering DICOMs from {input} and its subdirectories")
         dcms = dict()
         with tqdm() as bar:
-            for dirpath, dirnames, filenames in os.walk(path):
+            for dirpath, dirnames, filenames in os.walk(input):
                 for filename in [f for f in filenames if f.endswith(".dcm")]:
-                    dpath = dirpath.split(path)[1]
+                    dpath = dirpath.split(inputs)[1]
                     dcms[dpath] = dcms.get(dpath, []) + [filename]
                     bar.n = len(dcms.keys())
                     bar.refresh()
@@ -221,7 +223,7 @@ def create(name: str, path=None, parallel=True):
         # Create Dossier items
         dossiers = []
         for subpath, filenames in dcms.items():
-            dossiers.append(Dossier(path + subpath, filenames))
+            dossiers.append(Dossier(inputs + subpath, filenames))
 
         with pool:
             click.echo(f"Creating database from {len(dossiers)} DICOM directories")
@@ -231,12 +233,12 @@ def create(name: str, path=None, parallel=True):
                     rows.append(result)
 
         click.echo(f"Writing {len(rows)} rows to SQL database.")
-        conn = sqlite3.connect(f"{name}.db", timeout=60)
+        conn = sqlite3.connect(output, timeout=60)
         df = pd.DataFrame.from_dict(rows, orient='columns')
         with conn:
             conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
             df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
-        click.echo(f"Database created at {os.path.join(os.getcwd(), name)}.db")
+        click.echo(f"Database created at {os.path.join(os.getcwd(), output)}.db")
     except Exception as e:
         click.echo(e)
 
