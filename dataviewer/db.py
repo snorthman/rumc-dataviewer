@@ -232,9 +232,10 @@ def create(name: str, path=None, parallel=True):
 
         click.echo(f"Writing {len(rows)} rows to SQL database.")
         conn = sqlite3.connect(f"{name}.db", timeout=60)
+        df = pd.DataFrame.from_dict(rows, orient='columns')
         with conn:
             conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
-            pd.DataFrame.from_dict(rows, orient='columns').to_sql(name=TABLENAME, con=conn, if_exists='replace')
+            df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
         click.echo(f"Database created at {os.path.join(os.getcwd(), name)}.db")
     except Exception as e:
         click.echo(e)
