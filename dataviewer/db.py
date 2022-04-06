@@ -231,7 +231,7 @@ def create(name: str, path=None, parallel=True):
                     rows.append(result)
 
         click.echo(f"Writing {len(rows)} rows to SQL database.")
-        conn = sqlite3.connect(f"{name}.db")
+        conn = sqlite3.connect(f"{name}.db", timeout=60)
         with conn:
             conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
             pd.DataFrame.from_dict(rows, orient='columns').to_sql(name=TABLENAME, con=conn, if_exists='replace')
