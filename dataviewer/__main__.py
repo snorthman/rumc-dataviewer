@@ -30,7 +30,7 @@ def keys(output: bool):
 @click.option('-i', '--input', 'input', type=click.Path(resolve_path=True, path_type=Path),
               help="Read data from this directory.", prompt='Enter path/to/data_directory', default='.')
 @click.option('-o', '--output', 'output', type=click.Path(resolve_path=True, path_type=Path),
-              help="Output database to this directory.", prompt='Enter output path/to/database', default='./rumc_database.db')
+              help="Output database to this path.", prompt='Enter output path/to/database', default='./rumc_database.db')
 def new(input: Path, output: Path):
     """Create a database given a RUMC data directory. Overwrites existing databases in cwd."""
     if not input.is_dir():
@@ -64,9 +64,10 @@ def load(input: Path, all: bool, selection):
                 click.echo(
                     'creates a selection of series where dicom metadata Series Description contains either \'naald\' or \'nld\'')
                 click.echo('A blank input is considered the end of the list of key=value items\n')
-                while value := click.prompt(f'key=value ({len(kvp) + 1})', type=str, default='') > 0:
+                while value := click.prompt(f'key=value ({len(kvp) + 1})', type=str, default=''):
                     k, v = process_selection(value)
-                    kvp[k] = v
+                    if k and v:
+                        kvp[k] = v
 
         C = db.Connection(input)
         if len(kvp) > 0:
@@ -91,6 +92,7 @@ def process_selection(value: str):
                 click.echo('Ignored input, empty value')
         else:
             click.echo('Ignored input, no \'=\' found')
+    return False, False
 
 
 if __name__ == "__main__":

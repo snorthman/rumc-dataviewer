@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name='RUCMDataViewer',
-    version='1.0.1',
+    version='0.9.0',
     url='https://github.com/snorthman/RUMCDataViewer/',
     license='MIT',
     author='C.R. Noordman',
