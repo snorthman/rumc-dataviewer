@@ -8,8 +8,18 @@ setup(
     author='C.R. Noordman',
     author_email='stan.noordman@radboudumc.nl',
     description='View and setup data downloaded from RUMC',
-    packages=find_packages(),
-    include_package_data=True,
+    python_requires='>=3.6',
+    install_requires=[
+        'click~=8.1',
+        'dearpygui~=1.3',
+        'numpy~=1.22',
+        'pandas~=1.4',
+        'pydicom~=2.2',
+        'SimpleITK~=2.1',
+        'tqdm~=4.63',
+        'GDCM~=1.1',
+        'pylibjpeg~=1.4'
+    ],
     entry_points={
         'console_scripts': [
             'dataviewer = dataviewer:cli',
