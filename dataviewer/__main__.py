@@ -30,7 +30,7 @@ def keys(output: bool):
 @click.option('-i', '--input', 'input', type=click.Path(resolve_path=True, path_type=Path),
               help="Read data from this directory.", prompt='Enter path/to/data_directory', default='.')
 @click.option('-o', '--output', 'output', type=click.Path(resolve_path=True, path_type=Path),
-              help="Output database to this directory.", prompt='Enter output path/to/database', default='./rumc_database.db')
+              help="Output database to this path.", prompt='Enter output path/to/database', default='./rumc_database.db')
 def new(input: Path, output: Path):
     """Create a database given a RUMC data directory. Overwrites existing databases in cwd."""
     if not input.is_dir():
