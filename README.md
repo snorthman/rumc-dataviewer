@@ -2,10 +2,10 @@
 
 Use Py3.6+
 
-`dataviewer` is pip-installable:
+`rumc_dataviewer` is pip-installable:
  
 ```
-pip install git+https://github.com/snorthman/RUMCDataViewer
+pip install git+https://github.com/snorthman/rumc_dataviewer
 dataviewer --help
 dataviewer new --help
 ```
