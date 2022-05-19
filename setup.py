@@ -1,9 +1,9 @@
-from setuptools import setup, find_packages
+from setuptools import setup
 
 setup(
-    name='RUCMDataViewer',
+    name='rumc_dataviewer',
     version='1.0.2',
-    url='https://github.com/snorthman/RUMCDataViewer/',
+    url='https://github.com/snorthman/rumc_dataviewer/',
     license='MIT',
     author='C.R. Noordman',
     author_email='stan.noordman@radboudumc.nl',
