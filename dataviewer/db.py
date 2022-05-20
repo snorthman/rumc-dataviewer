@@ -218,7 +218,6 @@ class Dossier:
 def create(input: Path, output: Path):
     try:
         sqlite3.connect(output).close()
-        click.echo(f"Running {mp.cpu_count()} cpus for job.")
 
         click.echo(f"Gathering DICOMs from {input} and its subdirectories")
 
