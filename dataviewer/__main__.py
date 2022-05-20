@@ -1,5 +1,4 @@
 from pathlib import Path
-import os
 
 import click
 
@@ -69,12 +68,18 @@ def load(input: Path, all: bool, selection):
                     if k and v:
                         kvp[k] = v
 
-        C = db.Connection(input)
+        conn = db.Connection(input)
+
+        try:
+            db_input_path = Path(conn._c.execute("SELECT * FROM InputPath").fetchone()[1])
+        except:
+            db_input_path = ''
+
         if len(kvp) > 0:
-            selection, series = C.select(**kvp)
-            viewport.Viewer(C.name, selection, kvp, series).run()
+            selection, series = conn.select(**kvp)
+            viewport.Viewer(input, db_input_path, selection, kvp, series).run()
         else:
-            viewport.Viewer(C.name, C.select_all()).run()
+            viewport.Viewer(input, db_input_path, conn.select_all()).run()
     except Exception as e:
         click.echo(e)
 
@@ -93,7 +98,3 @@ def process_selection(value: str):
         else:
             click.echo('Ignored input, no \'=\' found')
     return False, False
-
-
-if __name__ == "__main__":
-    cli()

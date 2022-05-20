@@ -1,1 +1,3 @@
-from .__main__ import cli
+from dataviewer.__main__ import cli
+
+cli()
