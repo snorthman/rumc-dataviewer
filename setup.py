@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name='rumc_dataviewer',
-    version='1.0.2',
+    version='1.1.0',
     url='https://github.com/snorthman/rumc_dataviewer/',
     license='MIT',
     author='C.R. Noordman',
@@ -15,6 +15,7 @@ setup(
         'numpy~=1.22',
         'pandas~=1.4',
         'pydicom~=2.2',
+        'pylibjpeg-libjpeg~=1.3'
         'SimpleITK~=2.1',
         'tqdm~=4.63',
         'GDCM~=1.1',

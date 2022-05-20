@@ -1,4 +1,4 @@
-import sqlite3, datetime, os, multiprocessing as mp
+import sqlite3, datetime, os, multiprocessing as mp, concurrent.futures
 from pathlib import Path
 
 import click
@@ -87,7 +87,8 @@ dcm_tags = {  # Attributes
     "0040|0254": "PerformedProcedureStepDescription"
 }
 
-TABLENAME = "RUMC_PROSTATE_MPMRI"
+TABLE_DOSSIERS = "Dossiers"
+TABLE_PATH = "InputPath"
 ORDER_BY = "SeriesTime,StudyTime,StudyInstanceUID,SeriesInstanceUID,PatientID"
 
 
@@ -113,8 +114,8 @@ class Connection:
         R = []
         for r in results:
             item = dict()
-            for j in range(len(desc)):
-                item[desc[j][0]] = r[j]
+            for i, name in enumerate(desc):
+                item[name[0]] = r[i]
             R.append(item)
         return R
 
@@ -126,57 +127,73 @@ class Connection:
             values = ' OR '.join(values)
             q.append(f"({values})")
         selection = 'StudyInstanceUID,SeriesInstanceUID' if include_siblings else '*'
-        Q = f"SELECT {selection} FROM {TABLENAME} WHERE {' AND '.join(q)} ORDER BY {ORDER_BY}"
-        if include_siblings:
-            R = self._c.execute(Q).fetchall()
-            studies, series = set(), []
-            for study, serie in R:
-                series.append(serie)
-                studies.add(study)
-            return self.select(include_siblings=False, StudyInstanceUID=','.join([s for s in set(studies)])), series
-        return self._refactor_result(self._c.execute(Q).fetchall())
+        Q = f"SELECT {selection} FROM {TABLE_DOSSIERS} WHERE {' AND '.join(q)} ORDER BY {ORDER_BY}"
+
+        # studies can be duplicate (set), series should be unique (list)
+        studies, series = set(), []
+        for study, serie in self._c.execute(Q).fetchall():
+            studies.add(study)
+            series.append(serie)
+
+        temp = 'TEMP'
+        df = pd.DataFrame.from_records([{'uid': u} for u in studies])
+        df.to_sql(name=temp, con=self._conn, if_exists='replace')
+
+        R = self._c.execute(f"SELECT * FROM {TABLE_DOSSIERS} orig, {temp} t WHERE t.uid = orig.StudyInstanceUID").fetchall()
+        R = self._refactor_result(R)
+
+        self._c.execute(f"DROP TABLE {temp}")
+
+        return R, series
 
     def select_all(self):
-        Q = f"SELECT * FROM {TABLENAME} ORDER BY {ORDER_BY}"
+        Q = f"SELECT * FROM {TABLE_DOSSIERS} ORDER BY {ORDER_BY}"
         return self._refactor_result(self._c.execute(Q).fetchall())
 
 
 class Dossier:
-    def __init__(self, path: str, dcms: list):
-        self.dir = path
+    def __init__(self, input_dir: Path, dcm_dir: Path, dcms: list):
+        self.dcm_dir = dcm_dir
         self.sample = dcms[-1]
-        self.samplep = os.path.join(path, self.sample)
+        self.sample_path = str(input_dir / dcm_dir / self.sample)
         self.dcms = dcms
+        self._headers = None
 
     def __len__(self):
         return len(self.dcms)
 
     def is_valid(self):
         try:
-            pydicom.dcmread(self.samplep, specific_tags=['0x00080005'])
+            pydicom.dcmread(self.sample_path, specific_tags=['0x00080005'])
         except:
             try:
-                ifr.SetFileName(self.samplep)
+                ifr.SetFileName(self.sample_path)
                 ifr.ReadImageInformation()
             except:
                 return False
         return True
 
-    def dossier_to_row(self):
+    @property
+    def headers(self):
+        if not self._headers:
+            self._headers = self._dossier_to_row()
+        return self._headers
+
+    def _dossier_to_row(self):
         try:
-            dcm = pydicom.dcmread(self.samplep)
+            dcm = pydicom.dcmread(self.sample_path)
             get_metadata = lambda key: get_pydicom_value(dcm, key)
         except:
             try:
-                ifr.SetFileName(self.samplep)
+                ifr.SetFileName(self.sample_path)
                 ifr.ReadImageInformation()
                 get_metadata = lambda key: ifr.GetMetaData(key)
             except Exception as e:
-                print(f"EXCEPTION (skipping): {self.dir}")
+                print(f"EXCEPTION (skipping): {self.dcm_dir}")
                 print(e)
                 return None
 
-        headers = {'SeriesLength': len(self), 'Path': self.dir, 'Sample': self.sample}
+        headers = {'SeriesLength': len(self), 'Path': str(self.dcm_dir), 'Sample': self.sample}
         for key, header in dcm_tags.items():
             try:
                 header = header.replace(' ', '_').strip()
@@ -194,57 +211,56 @@ class Dossier:
 
         return headers
 
-
-def dossier2row(dossier: Dossier):
-    return dossier.dossier_to_row()
-
-
 # def header_to_date(header):
 #     header = str(header)
 #     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
-def create(input: Path, output: Path, parallel=True):
-    inputs = str(input)
+def create(input: Path, output: Path):
     try:
         sqlite3.connect(output).close()
-        pool = mp.Pool(mp.cpu_count()) if parallel else mp.Pool(1)
         click.echo(f"Running {mp.cpu_count()} cpus for job.")
 
         click.echo(f"Gathering DICOMs from {input} and its subdirectories")
+
         dcms = dict()
-        with tqdm() as bar:
-            for dirpath, dirnames, filenames in os.walk(input):
+        dirs = os.listdir(input)
+
+        def walk_input(dir: Path):
+            for dirpath, dirnames, filenames in os.walk(input / dir):
                 for filename in [f for f in filenames if f.endswith(".dcm")]:
-                    dpath = dirpath.split(inputs)[1]
+                    dpath = str(Path(dirpath).relative_to(input))
                     dcms[dpath] = dcms.get(dpath, []) + [filename]
-                    bar.n = len(dcms.keys())
-                    bar.refresh()
+
+        with concurrent.futures.ThreadPoolExecutor(min(32, (os.cpu_count() or 1) + 4)) as executor:
+            list(tqdm(executor.map(walk_input, dirs), total=len(dirs)))
 
         # Create Dossier items
         dossiers = []
         for subpath, filenames in dcms.items():
-            dossiers.append(Dossier(inputs + subpath, filenames))
+            dossiers.append(Dossier(input, subpath, filenames))
 
-        with pool:
-            click.echo(f"Creating database from {len(dossiers)} DICOM directories")
-            rows = []
-            for result in tqdm(pool.imap_unordered(dossier2row, dossiers), total=len(dossiers)):
-                if result is not None:
-                    rows.append(result)
+        click.echo(f"Creating database from {len(dossiers)} DICOM directories")
+
+        rows = []
+
+        def process_dossier(dossier):
+            headers = dossier.headers
+            if headers:
+                rows.append(dossier.headers)
+
+        with concurrent.futures.ThreadPoolExecutor(min(32, (os.cpu_count() or 1) + 4)) as executor:
+            list(tqdm(executor.map(process_dossier, dossiers), total=len(dossiers)))
 
         click.echo(f"Writing {len(rows)} rows to SQL database.")
+
+        df_dossiers = pd.DataFrame.from_dict(rows, orient='columns')
+        df_inputpath = pd.DataFrame({'Input': str(input)}, index=[0])
+
         conn = sqlite3.connect(output, timeout=60)
-        df = pd.DataFrame.from_dict(rows, orient='columns')
         with conn:
-            conn.cursor().execute(f"DROP TABLE IF EXISTS {TABLENAME}")
-            df.to_sql(name=TABLENAME, con=conn, if_exists='replace')
+            df_inputpath.to_sql(name=TABLE_PATH, con=conn, if_exists='replace')
+            df_dossiers.to_sql(name=TABLE_DOSSIERS, con=conn, if_exists='replace')
+
         click.echo(f"Database created at {os.path.join(os.getcwd(), output)}")
     except Exception as e:
         click.echo(e)
-
-
-if __name__ == '__main__':
-    # create("D:/Repos/RUMCDataViewer/test")
-    C = Connection("D:\\Repos\\RUMCDataViewer\\viewer\\tools\\RUMC_PROSTATE_MPMRI.db")
-    result = C.select(Series_Description='naald,nld')
-    pass
