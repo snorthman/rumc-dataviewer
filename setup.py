@@ -15,7 +15,7 @@ setup(
         'numpy~=1.22',
         'pandas~=1.4',
         'pydicom~=2.2',
-        'pylibjpeg-libjpeg~=1.3'
+        'pylibjpeg-libjpeg~=1.3',
         'SimpleITK~=2.1',
         'tqdm~=4.63',
         'GDCM~=1.1',
