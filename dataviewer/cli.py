@@ -4,7 +4,7 @@ import click
 
 from dataviewer import db
 from dataviewer import viewport
-from dataviewer import version
+from dataviewer import version as v
 
 (valid_keys := list(set(db.dcm_tags.values()))).sort()
 
@@ -17,7 +17,7 @@ def cli():
 @cli.command(name='version')
 def version():
     """Prints package version."""
-    click.echo(f'{__package__} v{version.__version__}')
+    click.echo(f'{__package__} v{v.__version__}')
 
 
 @cli.command(name='keys')
