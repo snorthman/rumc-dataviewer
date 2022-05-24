@@ -4,6 +4,7 @@ import click
 
 from dataviewer import db
 from dataviewer import viewport
+from dataviewer import version
 
 (valid_keys := list(set(db.dcm_tags.values()))).sort()
 
@@ -11,6 +12,12 @@ from dataviewer import viewport
 @click.group()
 def cli():
     pass
+
+
+@cli.command(name='version')
+def version():
+    """Prints package version."""
+    click.echo(f'{__package__} v{version.__version__}')
 
 
 @cli.command(name='keys')
@@ -69,6 +76,8 @@ def load(input: Path, all: bool, selection):
                         kvp[k] = v
 
         conn = db.Connection(input)
+
+        click.echo(f'Loading {input}...')
 
         try:
             db_input_path = Path(conn._c.execute("SELECT * FROM InputPath").fetchone()[1])

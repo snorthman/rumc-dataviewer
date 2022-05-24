@@ -1,14 +1,21 @@
 from setuptools import setup
+from distutils.util import convert_path
+
+ver = {}
+ver_path = convert_path('dataviewer/version.py')
+with open(ver_path) as ver_file:
+    exec(ver_file.read(), ver)
 
 setup(
-    name='rumc_dataviewer',
-    version='1.1.0',
+    name='rumc-dataviewer',
+    version=ver['__version__'],
     url='https://github.com/snorthman/rumc_dataviewer/',
     license='MIT',
     author='C.R. Noordman',
     author_email='stan.noordman@radboudumc.nl',
     description='View and setup data downloaded from RUMC',
     python_requires='>=3.6',
+    packages=['dataviewer'],
     install_requires=[
         'click~=8.1',
         'dearpygui~=1.3',
