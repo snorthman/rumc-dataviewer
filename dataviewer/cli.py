@@ -77,7 +77,7 @@ def load(input: Path, all: bool, selection):
 
         conn = db.Connection(input)
 
-        click.echo(f'Loading {input}...')
+        click.echo(f'Loading {input}')
 
         try:
             db_input_path = Path(conn._c.execute("SELECT * FROM InputPath").fetchone()[1])
@@ -86,9 +86,11 @@ def load(input: Path, all: bool, selection):
 
         if len(kvp) > 0:
             selection, series = conn.select(**kvp)
-            viewport.Viewer(input, db_input_path, selection, kvp, series).run()
+            viewer = viewport.Viewer(input, db_input_path, selection, kvp, series)
         else:
-            viewport.Viewer(input, db_input_path, conn.select_all()).run()
+            viewer = viewport.Viewer(input, db_input_path, conn.select_all())
+        click.echo(f'Running dataviewer...')
+        viewer.run()
     except Exception as e:
         click.echo(e)
 
