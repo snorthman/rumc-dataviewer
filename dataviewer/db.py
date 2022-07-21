@@ -254,7 +254,7 @@ def create(input: Path, output: Path):
         df_dossiers = pd.DataFrame.from_dict(rows, orient='columns')
         df_inputpath = pd.DataFrame({'Input': str(input)}, index=[0])
 
-        conn = sqlite3.connect(output, timeout=60)
+        conn = sqlite3.connect(output, timeout=600)
         with conn:
             df_inputpath.to_sql(name=TABLE_PATH, con=conn, if_exists='replace')
             df_dossiers.to_sql(name=TABLE_DOSSIERS, con=conn, if_exists='replace')
