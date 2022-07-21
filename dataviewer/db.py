@@ -215,10 +215,9 @@ class Dossier:
 #     header = str(header)
 #     return datetime.datetime(int(header[:4]), int(header[4:6]), int(header[6:]))
 
+
 def create(input: Path, output: Path):
     try:
-        sqlite3.connect(output).close()
-
         click.echo(f"Gathering DICOMs from {input} and its subdirectories")
 
         dcms = dict()
@@ -262,4 +261,4 @@ def create(input: Path, output: Path):
 
         click.echo(f"Database created at {os.path.join(os.getcwd(), output)}")
     except Exception as e:
-        click.echo(e)
+        click.echo(f'Error: {str(e)}')
